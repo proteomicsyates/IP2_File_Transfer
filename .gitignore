@@ -21,3 +21,12 @@
 
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
+/target/
+/logs/
+/Paths_for_repository_upload_corr.txt
+/ip2tomassive_CFTR_paths.txt
+/ip2tomassive.properties
+/ip2tomassive_CFTR.properties
+/.classpath
+/.project
+/.settings
