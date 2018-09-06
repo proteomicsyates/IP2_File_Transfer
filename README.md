@@ -3,7 +3,7 @@ Giving some SSH credentials to a file server with the files of IP2, it will expl
 
 ## How to run it:
 First, you need to write the input file paths created. The better way to do it is to run class:  
-`InputFileGenerator`  
+`edu.scripps.yates.ip2tomassive.InputFileGenerator`  
 
 
 with a single parameter with the input parameters full path.  
@@ -24,7 +24,7 @@ dtaselect_data_full_path/DTASelect-file3.raw
 ```
 
 Then, you need to run a second script from class:  
-`MultiProjectUpload`  
+`edu.scripps.yates.ip2tomassive.MultiProjectUpload`  
 
 with two parameters:
  * the full path to the properties file (the same as the one used in the previous script).  
