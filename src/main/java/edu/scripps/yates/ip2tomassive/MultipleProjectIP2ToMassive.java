@@ -6,6 +6,7 @@ import java.io.OutputStream;
 import java.net.SocketException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +23,7 @@ import com.jcraft.jsch.JSchException;
 import com.jcraft.jsch.Session;
 import com.jcraft.jsch.SftpException;
 
+import edu.scripps.yates.utilities.dates.DatesUtil;
 import edu.scripps.yates.utilities.files.FileUtils;
 import edu.scripps.yates.utilities.ftp.FTPUtils;
 
@@ -29,7 +31,7 @@ public class MultipleProjectIP2ToMassive extends IP2ToMassive {
 	private final static Logger log = Logger.getLogger(MultipleProjectIP2ToMassive.class);
 	protected static final String DATASET = "DATASET";
 	private final Map<String, Dataset> datasetsByName = new HashMap<String, Dataset>();
-	private String submissionName = "";
+	private final String submissionName = "";
 	private final Map<String, String> keywordTranslations;
 
 	public MultipleProjectIP2ToMassive(MySftpProgressMonitor progressMonitor, File propertiesFile,
@@ -42,6 +44,7 @@ public class MultipleProjectIP2ToMassive extends IP2ToMassive {
 	}
 
 	public void transferDatasets() {
+		final long t1 = System.currentTimeMillis();
 		long totalTransferredSize = 0l;
 		for (final String datasetName : datasetsByName.keySet()) {
 			log.info(datasetName + " transfer started");
@@ -52,8 +55,12 @@ public class MultipleProjectIP2ToMassive extends IP2ToMassive {
 					+ FileUtils.getDescriptiveSizeFromBytes(totalTransferredSize));
 
 		}
-		System.out.println(FileUtils.getDescriptiveSizeFromBytes(totalTransferredSize) + " transferred in "
-				+ datasetsByName.size() + " datasets");
+		final long spendTime = System.currentTimeMillis() - t1;
+		final String speed = FileUtils.getDescriptiveSizeFromBytes(
+				Double.valueOf(totalTransferredSize / (spendTime / 1000.0)).longValue()) + "/sg";
+		System.out.println(FileUtils.getDescriptiveSizeFromBytes(totalTransferredSize) + " transferred for "
+				+ datasetsByName.size() + " datasets in " + DatesUtil.getDescriptiveTimeFromMillisecs(spendTime) + " ("
+				+ speed + ")");
 	}
 
 	private long transferDataset(String datasetName) {
@@ -66,12 +73,14 @@ public class MultipleProjectIP2ToMassive extends IP2ToMassive {
 		final Map<String, String> outputFileNamesByPath = dataset.getOutputFileNameByPath();
 		for (final FileType fileType : fileTypes) {
 			final List<String> paths = dataset.getPathsByFileType().get(fileType);
-			for (final String path : paths) {
+
+			for (int i = 0; i < paths.size(); i++) {
+				final String path = paths.get(i);
 				final String outputFileName = outputFileNamesByPath.get(path);
 				final long transferredSize = transferFile(path, outputFileName, fileType, dataset);
 				totalTransferredSize += transferredSize;
 				System.out.println(FileUtils.getDescriptiveSizeFromBytes(totalTransferredSize) + " transferred in "
-						+ datasetName + " dataset so far");
+						+ datasetName + " dataset so far (file " + (i + 1) + " out of " + paths.size() + ")");
 			}
 		}
 		System.out.println(FileUtils.getDescriptiveSizeFromBytes(totalTransferredSize) + " transferred in "
@@ -172,10 +181,13 @@ public class MultipleProjectIP2ToMassive extends IP2ToMassive {
 				final String extension = FilenameUtils.getExtension(fullPathToIP2);
 
 				final String pathToFolderInIP2 = FilenameUtils.getFullPath(fullPathToIP2);
-
-				final List<LsEntry> ftpFilesInIP2 = FTPUtils.getFilesInFolderByExtension(sshIP2, pathToFolderInIP2,
-						extension);
-
+				final List<LsEntry> ftpFilesInIP2 = new ArrayList<LsEntry>();
+				if (FTPUtils.exist(sshIP2, fullPathToIP2)) {
+					final LsEntry lsEntry = FTPUtils.getFileEntry(sshIP2, fullPathToIP2);
+					ftpFilesInIP2.add(lsEntry);
+				} else {
+					ftpFilesInIP2.addAll(FTPUtils.getFilesInFolderByExtension(sshIP2, pathToFolderInIP2, extension));
+				}
 				for (final LsEntry ftpFileInIP2 : ftpFilesInIP2) {
 
 					try {
@@ -332,11 +344,4 @@ public class MultipleProjectIP2ToMassive extends IP2ToMassive {
 
 	}
 
-	public String getSubmissionName() {
-		return submissionName;
-	}
-
-	public void setSubmissionName(String submissionName) {
-		this.submissionName = submissionName;
-	}
 }

@@ -32,6 +32,7 @@ public class IP2ToMassive {
 	private final String projectName;
 	protected final MySftpProgressMonitor progressMonitor;
 	private final File propertiesFile;
+	private String submissionName;
 
 	public final static String IP2_SERVER_PROJECT_BASE_PATH = "ip2_server_project_base_path";
 	public final static String PROJECT_NAME = "project_name";
@@ -41,14 +42,23 @@ public class IP2ToMassive {
 
 		this.progressMonitor = progressMonitor;
 		this.propertiesFile = propertiesFile;
-		this.projectName = getProperties(this.propertiesFile).getProperty(PROJECT_NAME);
+		projectName = getProperties(this.propertiesFile).getProperty(PROJECT_NAME);
+		setSubmissionName(projectName);
 		getProperties(this.propertiesFile).getProperty(IP2_SERVER_PROJECT_BASE_PATH);
+	}
+
+	public String getSubmissionName() {
+		return submissionName;
+	}
+
+	public void setSubmissionName(String submissionName) {
+		this.submissionName = submissionName;
 	}
 
 	public void transferFiles(List<String> pathes) {
 		log.info(pathes.size() + " files to transfer");
-		ProgressCounter counter = new ProgressCounter(pathes.size(), ProgressPrintingType.EVERY_STEP, 0, true);
-		for (String string : pathes) {
+		final ProgressCounter counter = new ProgressCounter(pathes.size(), ProgressPrintingType.EVERY_STEP, 0, true);
+		for (final String string : pathes) {
 			counter.increment();
 			final String printIfNecessary = counter.printIfNecessary();
 			if (!"".equals(printIfNecessary)) {
@@ -65,32 +75,32 @@ public class IP2ToMassive {
 		try {
 			sftpIP2 = loginToIP2();
 			ftpMassive = loginToMassive();
-			String remotePathInMassive = projectName + "/raw";
+			final String remotePathInMassive = projectName + "/raw";
 			log.info("Transferring file " + fullPathInIP2);
 
 			FTPUtils.makeDirectories(ftpMassive, remotePathInMassive, System.out);
 
-			String fileName = FilenameUtils.getName(fullPathInIP2);
+			final String fileName = FilenameUtils.getName(fullPathInIP2);
 			progressMonitor.setSuffix("(" + fileName + ") ");
-			String fullPathInMassive = "/" + remotePathInMassive + "/" + fileName;
-			long size = FTPUtils.getSize(ftpMassive, fullPathInMassive);
+			final String fullPathInMassive = "/" + remotePathInMassive + "/" + fileName;
+			final long size = FTPUtils.getSize(ftpMassive, fullPathInMassive);
 			if (size != 0) {
 				log.info("File already found in MassIVE server with  " + FileUtils.getDescriptiveSizeFromBytes(size)
 						+ ". It will be skipped");
 				return;
 			}
 			outputStream = ftpMassive.storeFileStream(fullPathInMassive);
-			ChannelSftp sftpChannel = FTPUtils.openSFTPChannel(sftpIP2);
+			final ChannelSftp sftpChannel = FTPUtils.openSFTPChannel(sftpIP2);
 			sftpChannel.get(fullPathInIP2, outputStream);
 			sftpChannel.exit();
 			log.info("Transfer done.");
-		} catch (IOException e) {
+		} catch (final IOException e) {
 			e.printStackTrace();
 			log.warn(e.getMessage());
-		} catch (SftpException e) {
+		} catch (final SftpException e) {
 			e.printStackTrace();
 			log.warn(e.getMessage());
-		} catch (JSchException e) {
+		} catch (final JSchException e) {
 			e.printStackTrace();
 			log.warn(e.getMessage());
 		} finally {
@@ -105,7 +115,7 @@ public class IP2ToMassive {
 				if (sftpIP2 != null) {
 					sftpIP2.disconnect();
 				}
-			} catch (IOException e) {
+			} catch (final IOException e) {
 				e.printStackTrace();
 				log.warn(e.getMessage());
 			}
@@ -114,15 +124,15 @@ public class IP2ToMassive {
 
 	protected Session loginToIP2() throws IOException {
 		log.info("Login into server...");
-		Properties properties = getProperties(this.propertiesFile);
-		String hostName = properties.getProperty("ip2_server_url");
-		String userName = properties.getProperty("ip2_server_user_name");
-		String password = properties.getProperty("ip2_server_password");
-		int port = Integer.valueOf(properties.getProperty("ip2_server_connection_port"));
+		final Properties properties = getProperties(propertiesFile);
+		final String hostName = properties.getProperty("ip2_server_url");
+		final String userName = properties.getProperty("ip2_server_user_name");
+		final String password = properties.getProperty("ip2_server_password");
+		final int port = Integer.valueOf(properties.getProperty("ip2_server_connection_port"));
 		try {
-			Session ftpClient = FTPUtils.loginSSHClient(hostName, userName, password, port);
+			final Session ftpClient = FTPUtils.loginSSHClient(hostName, userName, password, port);
 			return ftpClient;
-		} catch (JSchException e) {
+		} catch (final JSchException e) {
 			e.printStackTrace();
 			throw new IllegalArgumentException("Cannot connect to IP2: " + e.getMessage());
 		}
@@ -131,9 +141,9 @@ public class IP2ToMassive {
 
 	protected static Properties getProperties(File propertiesFile) {
 		try {
-			Properties properties = PropertiesUtil.getProperties(propertiesFile);
+			final Properties properties = PropertiesUtil.getProperties(propertiesFile);
 			return properties;
-		} catch (Exception e) {
+		} catch (final Exception e) {
 			e.printStackTrace();
 			log.error(e);
 			throw new IllegalArgumentException("Error reading properties file: " + propertiesFile.getAbsolutePath());
@@ -142,32 +152,32 @@ public class IP2ToMassive {
 
 	protected FTPClient loginToMassive() throws IOException {
 
-		Properties properties = getProperties(this.propertiesFile);
-		String hostName = properties.getProperty("massive_server_url");
-		String userName = properties.getProperty("massive_server_user_name");
-		String password = properties.getProperty("massive_server_password");
+		final Properties properties = getProperties(propertiesFile);
+		final String hostName = properties.getProperty("massive_server_url");
+		final String userName = properties.getProperty("massive_server_user_name");
+		final String password = properties.getProperty("massive_server_password");
 		return FTPUtils.loginFTPClient(hostName, userName, password);
 
 	}
 
 	public List<String> getExperimentPathsFromIP2(String projectBasePath, TIntHashSet experimentIDs)
 			throws IOException, JSchException, SftpException {
-		List<String> ret = new ArrayList<String>();
+		final List<String> ret = new ArrayList<String>();
 		Session sftpIP2 = null;
 		ChannelSftp sftpChannel = null;
 		try {
 			sftpIP2 = loginToIP2();
 			sftpChannel = FTPUtils.openSFTPChannel(sftpIP2);
-			Vector<LsEntry> ls = sftpChannel.ls(projectBasePath);
-			for (LsEntry lsEntry : ls) {
-				String fileName = lsEntry.getFilename();
+			final Vector<LsEntry> ls = sftpChannel.ls(projectBasePath);
+			for (final LsEntry lsEntry : ls) {
+				final String fileName = lsEntry.getFilename();
 				if (lsEntry.getAttrs().isDir() && fileName.contains("_")) {
 					try {
-						int experimentID = Integer.valueOf(fileName.substring(fileName.lastIndexOf("_") + 1));
+						final int experimentID = Integer.valueOf(fileName.substring(fileName.lastIndexOf("_") + 1));
 						if (experimentIDs.contains(experimentID)) {
 							ret.add(projectBasePath + "/" + lsEntry.getFilename());
 						}
-					} catch (NumberFormatException e) {
+					} catch (final NumberFormatException e) {
 
 					}
 				}
@@ -180,16 +190,16 @@ public class IP2ToMassive {
 	}
 
 	public List<String> getRawFilesPaths(String experimentPath) throws IOException, JSchException, SftpException {
-		List<String> ret = new ArrayList<String>();
+		final List<String> ret = new ArrayList<String>();
 		Session sftpIP2 = null;
 		ChannelSftp sftpChannel = null;
 		try {
 			sftpIP2 = loginToIP2();
 			sftpChannel = FTPUtils.openSFTPChannel(sftpIP2);
-			String spectraPath = experimentPath + "/spectra";
-			Vector<LsEntry> ls = sftpChannel.ls(spectraPath);
-			for (LsEntry lsEntry : ls) {
-				String fileName = lsEntry.getFilename();
+			final String spectraPath = experimentPath + "/spectra";
+			final Vector<LsEntry> ls = sftpChannel.ls(spectraPath);
+			for (final LsEntry lsEntry : ls) {
+				final String fileName = lsEntry.getFilename();
 				if (!lsEntry.getAttrs().isDir() && fileName.endsWith("raw")) {
 					ret.add(spectraPath + "/" + lsEntry.getFilename());
 				}
@@ -203,24 +213,24 @@ public class IP2ToMassive {
 
 	public List<Search> getDTASelectPathsAndParameters(String experimentPath)
 			throws IOException, JSchException, SftpException {
-		List<Search> ret = new ArrayList<Search>();
+		final List<Search> ret = new ArrayList<Search>();
 		Session sftpIP2 = null;
 		ChannelSftp sftpChannel = null;
 		try {
 			sftpIP2 = loginToIP2();
 			sftpChannel = FTPUtils.openSFTPChannel(sftpIP2);
-			String searchPath = experimentPath + "/search";
-			Vector<LsEntry> ls = sftpChannel.ls(searchPath);
-			for (LsEntry lsEntry : ls) {
-				String fileName = lsEntry.getFilename();
+			final String searchPath = experimentPath + "/search";
+			final Vector<LsEntry> ls = sftpChannel.ls(searchPath);
+			for (final LsEntry lsEntry : ls) {
+				final String fileName = lsEntry.getFilename();
 				if (lsEntry.getAttrs().isDir() && fileName.contains("_")) {
-					Vector<LsEntry> ls2 = sftpChannel.ls(searchPath + "/" + lsEntry.getFilename());
-					for (LsEntry lsEntry2 : ls2) {
+					final Vector<LsEntry> ls2 = sftpChannel.ls(searchPath + "/" + lsEntry.getFilename());
+					for (final LsEntry lsEntry2 : ls2) {
 						if (lsEntry2.getFilename().equals("DTASelect-filter.txt")) {
-							String parameters = readDTASelectParameters(lsEntry2, sftpIP2,
+							final String parameters = readDTASelectParameters(lsEntry2, sftpIP2,
 									searchPath + "/" + lsEntry.getFilename());
-							int id = Integer.valueOf(fileName.substring(fileName.lastIndexOf("_") + 1));
-							Search pair = new Search(id,
+							final int id = Integer.valueOf(fileName.substring(fileName.lastIndexOf("_") + 1));
+							final Search pair = new Search(id,
 									searchPath + "/" + lsEntry.getFilename() + "/" + lsEntry2.getFilename(),
 									parameters);
 							ret.add(pair);
@@ -237,14 +247,14 @@ public class IP2ToMassive {
 
 	private String readDTASelectParameters(LsEntry lsEntry2, Session remoteServerSession, String parentFolder)
 			throws JSchException, SftpException, IOException {
-		File tempFile = File.createTempFile("todelete", "");
+		final File tempFile = File.createTempFile("todelete", "");
 		tempFile.deleteOnExit();
-		FileOutputStream outputStream = new FileOutputStream(tempFile);
+		final FileOutputStream outputStream = new FileOutputStream(tempFile);
 
-		long download = FTPUtils.download(remoteServerSession, parentFolder + "/" + lsEntry2.getFilename(),
+		final long download = FTPUtils.download(remoteServerSession, parentFolder + "/" + lsEntry2.getFilename(),
 				outputStream, progressMonitor);
 		if (download > 0) {
-			DTASelectParser parser = new DTASelectParser(tempFile);
+			final DTASelectParser parser = new DTASelectParser(tempFile);
 			parser.setOnlyReadParameters(true);
 			return parser.getCommandLineParameter().toString();
 		}

@@ -22,18 +22,22 @@ public class Dataset {
 		if (!pathsByFileType.containsKey(fileType)) {
 			addFileType(fileType);
 		}
-		pathsByFileType.get(fileType).add(path);
+		if (!pathsByFileType.get(fileType).contains(path)) {
+			pathsByFileType.get(fileType).add(path);
+		} else {
+			System.out.println("Already there");
+		}
 	}
 
 	private void addFileType(FileType fileType) {
-		this.pathsByFileType.put(fileType, new ArrayList<String>());
+		pathsByFileType.put(fileType, new ArrayList<String>());
 	}
 
 	public void addRemoteOutputFileName(String path, String localFileName) {
 		if (remoteOutputFileNamesByPath.containsKey(path)) {
 			throw new IllegalArgumentException(path + " is duplicated");
 		}
-		this.remoteOutputFileNamesByPath.put(path, localFileName);
+		remoteOutputFileNamesByPath.put(path, localFileName);
 	}
 
 	public Map<FileType, List<String>> getPathsByFileType() {

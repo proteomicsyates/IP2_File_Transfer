@@ -8,30 +8,35 @@ import gnu.trove.map.hash.THashMap;
 
 public class MultiProjectUpload {
 	public static void main(String[] args) {
-		final File propertiesFile = new File(args[0]);
-		File remotePathsFile = null;
-
-		if (args.length > 1) {
-			remotePathsFile = new File(args[1]);
-		}
-		final Map<String, String> translations = new THashMap<String, String>();
-		translations.put("X09", "normal1");
-		translations.put("X5709", "normal1");
-		translations.put("X83", "normal2");
-		translations.put("X5783", "normal2");
-		translations.put("X5750", "AD1");
-		translations.put("X5743", "AD2");
-		translations.put("X5248", "control3");
-		translations.put("X4870", "control4");
-		translations.put("X5763", "AD3");
-		translations.put("X5798", "AD4");
-		translations.put("X43", "AD2");
-		translations.put("X50", "AD1");
-		final MySftpProgressMonitor progressMonitor = new MySftpProgressMonitor(System.out);
 		try {
+			final File propertiesFile = new File(args[0]);
+			File remotePathsFile = null;
+
+			if (args.length > 1) {
+				remotePathsFile = new File(args[1]);
+			} else {
+				// create input file
+				final InputFileGenerator inputFileGenerator = new InputFileGenerator(propertiesFile, false);
+				remotePathsFile = inputFileGenerator.run();
+			}
+			final Map<String, String> translations = new THashMap<String, String>();
+			// translations.put("X09", "normal1");
+			// translations.put("X5709", "normal1");
+			// translations.put("X83", "normal2");
+			// translations.put("X5783", "normal2");
+			// translations.put("X5750", "AD1");
+			// translations.put("X5743", "AD2");
+			// translations.put("X5248", "control3");
+			// translations.put("X4870", "control4");
+			// translations.put("X5763", "AD3");
+			// translations.put("X5798", "AD4");
+			// translations.put("X43", "AD2");
+			// translations.put("X50", "AD1");
+			final MySftpProgressMonitor progressMonitor = new MySftpProgressMonitor(System.out);
+
 			final MultipleProjectIP2ToMassive m = new MultipleProjectIP2ToMassive(progressMonitor, propertiesFile,
 					translations, remotePathsFile);
-			m.setSubmissionName("Surface Labelling");
+			// m.setSubmissionName("Surface Labelling");
 
 			m.transferDatasets();
 			System.out.println("PROGRAM FINISHED OK");
