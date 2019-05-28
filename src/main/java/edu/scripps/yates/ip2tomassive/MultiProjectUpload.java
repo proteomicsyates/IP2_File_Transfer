@@ -13,8 +13,12 @@ public class MultiProjectUpload {
 			File remotePathsFile = null;
 
 			if (args.length > 1) {
+				// if there is more than one file, we already have the remotePathsFile
 				remotePathsFile = new File(args[1]);
 			} else {
+				// if there is only one file is the properties file with the info about the
+				// server, the IP2 experiments, etc...
+// an example is the file ip2FileTransfer.properties file 
 				// create input file
 				final InputFileGenerator inputFileGenerator = new InputFileGenerator(propertiesFile, false);
 				remotePathsFile = inputFileGenerator.run();
