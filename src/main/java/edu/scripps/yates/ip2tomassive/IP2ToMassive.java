@@ -32,7 +32,7 @@ public class IP2ToMassive {
 	private final String projectName;
 	protected final MySftpProgressMonitor progressMonitor;
 	private final File propertiesFile;
-	private String submissionName;
+	protected String submissionName;
 
 	public final static String IP2_SERVER_PROJECT_BASE_PATH = "ip2_server_project_base_path";
 	public final static String PROJECT_NAME = "project_name";

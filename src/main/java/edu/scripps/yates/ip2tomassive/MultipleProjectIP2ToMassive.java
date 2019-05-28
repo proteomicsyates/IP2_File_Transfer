@@ -11,6 +11,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.net.ftp.FTP;
@@ -31,7 +33,6 @@ public class MultipleProjectIP2ToMassive extends IP2ToMassive {
 	private final static Logger log = Logger.getLogger(MultipleProjectIP2ToMassive.class);
 	protected static final String DATASET = "DATASET";
 	private final Map<String, Dataset> datasetsByName = new HashMap<String, Dataset>();
-	private final String submissionName = "";
 	private final Map<String, String> keywordTranslations;
 
 	public MultipleProjectIP2ToMassive(MySftpProgressMonitor progressMonitor, File propertiesFile,
@@ -114,6 +115,13 @@ public class MultipleProjectIP2ToMassive extends IP2ToMassive {
 					// it is because it is a wild card
 					// take all in the transfer
 				}
+				// if the name is like dtaselect-filter.txt or census-out.txt or so
+				if (isGenericName(fileName)) {
+					final String fileName2 = getFileNameFromIP2ServerPath(line);
+					if (fileName2 != null) {
+						fileName = fileName2;
+					}
+				}
 				final Dataset currentDataset = datasetsByName.get(currentDataSet);
 				currentDataset.addRemoteOutputFileName(path, fileName);
 				currentDataset.addPath(currentFileType, path);
@@ -126,6 +134,69 @@ public class MultipleProjectIP2ToMassive extends IP2ToMassive {
 				}
 			}
 		}
+	}
+
+	/**
+	 * It takes the name from a IP2 server folder.<br>
+	 * If the folder is like:
+	 * /data/2/rpark/ip2_data/cbamberg/CPP_on_brain_tissue/B9_X5628_UZ_Sup_2019_02_11_11_242951/quant/2019_02_19_10_17605/DTASelect-filter.txt,
+	 * the returned file name should be: B9_X5628_UZ_Sup, which is the name of the
+	 * folder that is parent of a special folder ( quant, spectra or search ) and
+	 * after removing the date from it.
+	 * 
+	 * @param line
+	 * @return
+	 */
+	private String getFileNameFromIP2ServerPath(String line) {
+		final String[] ip2FolderTypes = { "quant", "spectra", "search" };
+		File folder = new File(line);
+		String extension = "";
+		while (folder != null) {
+			final String extension2 = FilenameUtils.getExtension(folder.getAbsolutePath());
+			if (extension2 != null && !"".equals(extension2)) {
+				extension = extension2;
+			}
+			final String baseName = FilenameUtils.getBaseName(folder.getAbsolutePath());
+			boolean specialFolderFound = false;
+			for (final String string : ip2FolderTypes) {
+				if (baseName.equalsIgnoreCase(string)) {
+					specialFolderFound = true;
+				}
+			}
+			folder = folder.getParentFile();
+			if (specialFolderFound) {
+				break;
+			}
+		}
+		// now in folder we have the folder with the name as:
+		// B9_X5628_UZ_Sup_2019_02_11_11_242951
+		final String crudeFileName = FilenameUtils.getBaseName(folder.getAbsolutePath());
+
+		final String pattern = "(.+)_\\d\\d\\d\\d_\\d\\d_.*";
+		final Pattern compile = Pattern.compile(pattern);
+		final Matcher matcher = compile.matcher(crudeFileName);
+		if (matcher.find()) {
+			String ret = matcher.group(1);
+			if (extension != null && !"".equals(extension)) {
+				ret = ret + "." + extension;
+			}
+			return ret;
+		}
+		return null;
+	}
+
+	private boolean isGenericName(String fileName) {
+		if (fileName == null) {
+			return false;
+		}
+		for (final FileType fileType : FileType.values()) {
+			if (fileType.getDefaultFileName() != null) {
+				if (fileType.getDefaultFileName().equals(fileName)) {
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	private String getKeywordToTranslate(String fileName) {
