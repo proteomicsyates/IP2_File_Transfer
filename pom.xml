@@ -26,7 +26,7 @@
 	  <dependency>
 		  <groupId>edu.scripps.yates</groupId>
 		  <artifactId>utilities</artifactId>
-		  <version>1.5-SNAPSHOT</version>
+		  <version>1.6-SNAPSHOT</version>
 	  </dependency>
   	<dependency>
   		<groupId>org.apache.logging.log4j</groupId>
@@ -38,7 +38,33 @@
   	<dependency>
   		<groupId>edu.scripps.yates</groupId>
   		<artifactId>dtaselectparser</artifactId>
-  		<version>1.1.1-SNAPSHOT</version>
+  		<version>1.1.2-SNAPSHOT</version>
+  	</dependency>
+  	
+  	<dependency>
+      <groupId>com.google.apis</groupId>
+      <artifactId>google-api-services-drive</artifactId>
+      <version>v3-rev110-1.23.0</version>
+    </dependency>
+<!--   	<dependency> -->
+<!--   		<groupId>com.google.api-client</groupId> -->
+<!--   		<artifactId>google-api-client</artifactId> -->
+<!--   		<version>1.25.0</version> -->
+<!--   	</dependency> -->
+<!--   	<dependency> -->
+<!--   		<groupId>com.google.oauth-client</groupId> -->
+<!--   		<artifactId>google-oauth-client-jetty</artifactId> -->
+<!--   		<version>1.25.0</version> -->
+<!--   	</dependency> -->
+  	<dependency>
+  		<groupId>com.google.oauth-client</groupId>
+  		<artifactId>google-oauth-client-jetty</artifactId>
+  		<version>1.23.0</version>
+  	</dependency>
+  	<dependency>
+  		<groupId>com.google.api-client</groupId>
+  		<artifactId>google-api-client</artifactId>
+  		<version>1.23.0</version>
   	</dependency>
   </dependencies>
   <build>

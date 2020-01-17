@@ -12,6 +12,8 @@ public class MultiProjectUpload {
 			final File propertiesFile = new File(args[0]);
 			File remotePathsFile = null;
 
+			final boolean takeEverythingBaseFolder = true;
+			final boolean includeDTASelectFiles = true;
 			if (args.length > 1) {
 				// if there is more than one file, we already have the remotePathsFile
 				remotePathsFile = new File(args[1]);
@@ -20,9 +22,11 @@ public class MultiProjectUpload {
 				// server, the IP2 experiments, etc...
 // an example is the file ip2FileTransfer.properties file 
 				// create input file
-				final InputFileGenerator inputFileGenerator = new InputFileGenerator(propertiesFile, false);
+				final InputFileGenerator inputFileGenerator = new InputFileGenerator(propertiesFile,
+						includeDTASelectFiles, takeEverythingBaseFolder);
 				remotePathsFile = inputFileGenerator.run();
 			}
+			final boolean useGoogleDrive = Boolean.valueOf(args[2]);
 			final Map<String, String> translations = new THashMap<String, String>();
 			// translations.put("X09", "normal1");
 			// translations.put("X5709", "normal1");
@@ -38,14 +42,26 @@ public class MultiProjectUpload {
 			// translations.put("X50", "AD1");
 			final MySftpProgressMonitor progressMonitor = new MySftpProgressMonitor(System.out);
 
-			final MultipleProjectIP2ToMassive m = new MultipleProjectIP2ToMassive(progressMonitor, propertiesFile,
-					translations, remotePathsFile);
-			// m.setSubmissionName("Surface Labelling");
+			MultipleProjectIP2ToMassive m = null;
+			if (useGoogleDrive) {
+				final String credentialsFilePath = args[3];
+				final boolean overrideIfDifferentSize = Boolean.valueOf(args[4]);
+				final GoogleDriveClient client = GoogleDriveClient.getInstance(credentialsFilePath);
+				m = new MultipleProjectIP2ToGoogleDrive(progressMonitor, propertiesFile, translations, remotePathsFile,
+						client, overrideIfDifferentSize);
+			} else {
+				m = new MultipleProjectIP2ToMassive(progressMonitor, propertiesFile, translations, remotePathsFile);
+			}
+			// m.setSubmissionName("Surface Labeling");
 
 			m.transferDatasets();
 			System.out.println("PROGRAM FINISHED OK");
 			System.exit(0);
 		} catch (final IOException e) {
+			e.printStackTrace();
+			System.err.println(e.getMessage());
+			System.exit(-1);
+		} catch (final Exception e) {
 			e.printStackTrace();
 			System.err.println(e.getMessage());
 			System.exit(-1);

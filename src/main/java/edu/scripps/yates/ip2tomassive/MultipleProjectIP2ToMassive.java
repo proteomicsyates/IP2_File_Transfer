@@ -33,7 +33,7 @@ public class MultipleProjectIP2ToMassive extends IP2ToMassive {
 	private final static Logger log = Logger.getLogger(MultipleProjectIP2ToMassive.class);
 	protected static final String DATASET = "DATASET";
 	private final Map<String, Dataset> datasetsByName = new HashMap<String, Dataset>();
-	private final Map<String, String> keywordTranslations;
+	protected final Map<String, String> keywordTranslations;
 
 	public MultipleProjectIP2ToMassive(MySftpProgressMonitor progressMonitor, File propertiesFile,
 			Map<String, String> keywordTranslations, File remotePathsFile) throws IOException {
@@ -62,6 +62,7 @@ public class MultipleProjectIP2ToMassive extends IP2ToMassive {
 		System.out.println(FileUtils.getDescriptiveSizeFromBytes(totalTransferredSize) + " transferred for "
 				+ datasetsByName.size() + " datasets in " + DatesUtil.getDescriptiveTimeFromMillisecs(spendTime) + " ("
 				+ speed + ")");
+
 	}
 
 	private long transferDataset(String datasetName) {
@@ -199,7 +200,7 @@ public class MultipleProjectIP2ToMassive extends IP2ToMassive {
 		return false;
 	}
 
-	private String getKeywordToTranslate(String fileName) {
+	protected String getKeywordToTranslate(String fileName) {
 		for (final String keyword : keywordTranslations.keySet()) {
 			if (fileName.contains(keyword)) {
 				return keyword;
@@ -409,7 +410,7 @@ public class MultipleProjectIP2ToMassive extends IP2ToMassive {
 		return sizeTransferred;
 	}
 
-	private boolean createFullPathInRemote(FTPClient ftpOut, String remotePath) throws IOException {
+	protected boolean createFullPathInRemote(FTPClient ftpOut, String remotePath) throws IOException {
 
 		return FTPUtils.makeDirectories(ftpOut, remotePath, System.out);
 

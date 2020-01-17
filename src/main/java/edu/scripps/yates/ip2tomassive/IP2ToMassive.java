@@ -33,6 +33,7 @@ public class IP2ToMassive {
 	protected final MySftpProgressMonitor progressMonitor;
 	private final File propertiesFile;
 	protected String submissionName;
+	private final String projectBasePathInIP2;
 
 	public final static String IP2_SERVER_PROJECT_BASE_PATH = "ip2_server_project_base_path";
 	public final static String PROJECT_NAME = "project_name";
@@ -44,7 +45,7 @@ public class IP2ToMassive {
 		this.propertiesFile = propertiesFile;
 		projectName = getProperties(this.propertiesFile).getProperty(PROJECT_NAME);
 		setSubmissionName(projectName);
-		getProperties(this.propertiesFile).getProperty(IP2_SERVER_PROJECT_BASE_PATH);
+		projectBasePathInIP2 = getProperties(this.propertiesFile).getProperty(IP2_SERVER_PROJECT_BASE_PATH);
 	}
 
 	public String getSubmissionName() {
@@ -123,7 +124,7 @@ public class IP2ToMassive {
 	}
 
 	protected Session loginToIP2() throws IOException {
-		log.info("Login into server...");
+		log.debug("Login into server...");
 		final Properties properties = getProperties(propertiesFile);
 		final String hostName = properties.getProperty("ip2_server_url");
 		final String userName = properties.getProperty("ip2_server_user_name");
@@ -168,20 +169,9 @@ public class IP2ToMassive {
 		try {
 			sftpIP2 = loginToIP2();
 			sftpChannel = FTPUtils.openSFTPChannel(sftpIP2);
-			final Vector<LsEntry> ls = sftpChannel.ls(projectBasePath);
-			for (final LsEntry lsEntry : ls) {
-				final String fileName = lsEntry.getFilename();
-				if (lsEntry.getAttrs().isDir() && fileName.contains("_")) {
-					try {
-						final int experimentID = Integer.valueOf(fileName.substring(fileName.lastIndexOf("_") + 1));
-						if (experimentIDs.contains(experimentID)) {
-							ret.add(projectBasePath + "/" + lsEntry.getFilename());
-						}
-					} catch (final NumberFormatException e) {
 
-					}
-				}
-			}
+			ret.addAll(getProjectPaths(sftpChannel, projectBasePath, experimentIDs));
+
 		} finally {
 			sftpChannel.disconnect();
 			sftpIP2.disconnect();
@@ -189,7 +179,34 @@ public class IP2ToMassive {
 		return ret;
 	}
 
-	public List<String> getRawFilesPaths(String experimentPath) throws IOException, JSchException, SftpException {
+	private List<String> getProjectPaths(ChannelSftp sftpChannel, String projectBasePath, TIntHashSet experimentIDs)
+			throws SftpException {
+		final List<String> ret = new ArrayList<String>();
+		final Vector<LsEntry> ls = sftpChannel.ls(projectBasePath);
+		for (final LsEntry lsEntry : ls) {
+			final String fileName = lsEntry.getFilename();
+			if (lsEntry.getAttrs().isDir()) {
+				if (fileName.contains("_")) {
+					try {
+						final int experimentID = Integer.valueOf(fileName.substring(fileName.lastIndexOf("_") + 1));
+						if (experimentIDs == null || experimentIDs.contains(experimentID)) {
+							ret.add(projectBasePath + "/" + lsEntry.getFilename());
+						}
+					} catch (final NumberFormatException e) {
+						ret.addAll(getProjectPaths(sftpChannel, projectBasePath + "/" + lsEntry.getFilename(),
+								experimentIDs));
+					}
+				} else if (!fileName.equals(".") && !fileName.equals("..")) {
+					ret.addAll(
+							getProjectPaths(sftpChannel, projectBasePath + "/" + lsEntry.getFilename(), experimentIDs));
+				}
+			}
+		}
+		return ret;
+	}
+
+	public List<String> getRawFilesPaths(String experimentPath, String rawFileExtension)
+			throws IOException, JSchException, SftpException {
 		final List<String> ret = new ArrayList<String>();
 		Session sftpIP2 = null;
 		ChannelSftp sftpChannel = null;
@@ -200,10 +217,15 @@ public class IP2ToMassive {
 			final Vector<LsEntry> ls = sftpChannel.ls(spectraPath);
 			for (final LsEntry lsEntry : ls) {
 				final String fileName = lsEntry.getFilename();
-				if (!lsEntry.getAttrs().isDir() && fileName.endsWith("raw")) {
+				if (!lsEntry.getAttrs().isDir() && fileName.endsWith(rawFileExtension)) {
 					ret.add(spectraPath + "/" + lsEntry.getFilename());
 				}
 			}
+		} catch (final SftpException e) {
+			if (e.getMessage().contains("No such file")) {
+				log.warn("'" + experimentPath + "/spectra' doesnt exist on server...so no raw files here");
+			}
+
 		} finally {
 			sftpChannel.disconnect();
 			sftpIP2.disconnect();
@@ -227,6 +249,7 @@ public class IP2ToMassive {
 					final Vector<LsEntry> ls2 = sftpChannel.ls(searchPath + "/" + lsEntry.getFilename());
 					for (final LsEntry lsEntry2 : ls2) {
 						if (lsEntry2.getFilename().equals("DTASelect-filter.txt")) {
+
 							final String parameters = readDTASelectParameters(lsEntry2, sftpIP2,
 									searchPath + "/" + lsEntry.getFilename());
 							final int id = Integer.valueOf(fileName.substring(fileName.lastIndexOf("_") + 1));
@@ -237,6 +260,10 @@ public class IP2ToMassive {
 						}
 					}
 				}
+			}
+		} catch (final SftpException e) {
+			if (e.getMessage().contains("No such file")) {
+				log.warn("'" + experimentPath + "/spectra' doesnt exist on server...so no dtaselect files here");
 			}
 		} finally {
 			sftpChannel.disconnect();
@@ -259,6 +286,10 @@ public class IP2ToMassive {
 			return parser.getCommandLineParameter().toString();
 		}
 		return projectName;
+	}
+
+	public String getProjectBasePathInIP2() {
+		return projectBasePathInIP2;
 	}
 
 }

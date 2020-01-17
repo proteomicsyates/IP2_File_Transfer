@@ -7,17 +7,32 @@ import java.util.List;
 import java.util.Properties;
 
 import org.apache.commons.io.FilenameUtils;
+import org.apache.log4j.Logger;
 import org.mortbay.log.Log;
 
 import gnu.trove.set.hash.TIntHashSet;
 
 public class InputFileGenerator {
+	private static final Logger log = Logger.getLogger(InputFileGenerator.class);
 	private final File paramFile;
 	private final boolean includeDTASelect;
+	private final boolean takeEverythingBaseFolder;
+	private final boolean getMS1 = true;
+	private final boolean getMS2 = true;
+	private final boolean getMS3 = true;
 
-	public InputFileGenerator(File paramFile, boolean includeDTASelect) {
+	/**
+	 * 
+	 * @param paramFile
+	 * @param includeDTASelect
+	 * @param takeEverythingBaseFolder if true, it looks recursively for the files
+	 *                                 from the basePath, otherwise, it uses the
+	 *                                 experiment ids
+	 */
+	public InputFileGenerator(File paramFile, boolean includeDTASelect, boolean takeEverythingBaseFolder) {
 		this.paramFile = paramFile;
 		this.includeDTASelect = includeDTASelect;
+		this.takeEverythingBaseFolder = takeEverythingBaseFolder;
 	}
 
 	public File run() throws IOException {
@@ -29,7 +44,7 @@ public class InputFileGenerator {
 		final String expIDs = properties.getProperty(IP2ToMassive.EXPERIMENT_IDS);
 
 		final TIntHashSet experimentIDs = toIntSet(expIDs);
-		if (projectBasePath == null) {
+		if (!takeEverythingBaseFolder && projectBasePath == null) {
 			throw new IllegalArgumentException(
 					IP2ToMassive.IP2_SERVER_PROJECT_BASE_PATH + " property is needed in parameters file");
 		}
@@ -45,13 +60,54 @@ public class InputFileGenerator {
 					+ "\n");
 			// everything is fine until here
 			final List<String> experimentPaths = ip2Massive.getExperimentPathsFromIP2(projectBasePath, experimentIDs);
+			log.info(experimentPaths.size() + " experiment paths retrieved");
+			int numRaws = 0;
+			int numMS1s = 0;
+			int numMS2s = 0;
+			int numMS3s = 0;
+			int numDTASelects = 0;
 			for (final String experimentPath : experimentPaths) {
+				log.info("Looking into path: " + experimentPath);
 				// raws
-				final List<String> rawFilesPaths = ip2Massive.getRawFilesPaths(experimentPath);
+				List<String> rawFilesPaths = ip2Massive.getRawFilesPaths(experimentPath, "raw");
 				if (!rawFilesPaths.isEmpty()) {
 					fw.write(FileType.RAW.getDescription() + "\n");
 					for (final String rawFile : rawFilesPaths) {
 						fw.write(rawFile + "\n");
+						numRaws++;
+					}
+				}
+				// ms1
+				if (getMS1) {
+					rawFilesPaths = ip2Massive.getRawFilesPaths(experimentPath, "ms1");
+					if (!rawFilesPaths.isEmpty()) {
+						fw.write(FileType.MS1.getDescription() + "\n");
+						for (final String rawFile : rawFilesPaths) {
+							fw.write(rawFile + "\n");
+							numMS1s++;
+						}
+					}
+				}
+				// ms2
+				if (getMS2) {
+					rawFilesPaths = ip2Massive.getRawFilesPaths(experimentPath, "ms2");
+					if (!rawFilesPaths.isEmpty()) {
+						fw.write(FileType.MS2.getDescription() + "\n");
+						for (final String rawFile : rawFilesPaths) {
+							fw.write(rawFile + "\n");
+							numMS2s++;
+						}
+					}
+				}
+				// ms3
+				if (getMS3) {
+					rawFilesPaths = ip2Massive.getRawFilesPaths(experimentPath, "ms3");
+					if (!rawFilesPaths.isEmpty()) {
+						fw.write(FileType.MS3.getDescription() + "\n");
+						for (final String rawFile : rawFilesPaths) {
+							fw.write(rawFile + "\n");
+							numMS3s++;
+						}
 					}
 				}
 				if (includeDTASelect) {
@@ -66,9 +122,15 @@ public class InputFileGenerator {
 							final String newFileName = FilenameUtils.getBaseName(dtaSelectPath) + "_" + search.getId()
 									+ ".txt";
 							fw.write(dtaSelectPath + "\t" + newFileName + "\t" + parameters + "\n");
+							numDTASelects++;
 						}
 					}
 				}
+				log.info("Number of raw files so far: " + numRaws);
+				log.info("Number of ms1 files so far: " + numMS1s);
+				log.info("Number of ms2 files so far: " + numMS2s);
+				log.info("Number of ms3 files so far: " + numMS3s);
+				log.info("Number of dtaselect files so far: " + numDTASelects);
 			}
 		} catch (final Exception e) {
 			e.printStackTrace();
@@ -79,6 +141,9 @@ public class InputFileGenerator {
 	}
 
 	private TIntHashSet toIntSet(String expIDs) {
+		if (expIDs == null) {
+			return null;
+		}
 		try {
 			final TIntHashSet ret = new TIntHashSet();
 			if (expIDs.contains(",")) {
@@ -106,8 +171,8 @@ public class InputFileGenerator {
 				throw new IllegalArgumentException(
 						"One and only one parameter is accepted, which is the input parameter file");
 			}
-			final InputFileGenerator inputFileGenerator = new InputFileGenerator(paramFile, false);
-
+			final InputFileGenerator inputFileGenerator = new InputFileGenerator(paramFile, true, true);
+			inputFileGenerator.run();
 		} catch (final Exception e) {
 			System.exit(-1);
 		}
