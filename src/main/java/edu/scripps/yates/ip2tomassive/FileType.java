@@ -1,15 +1,17 @@
 package edu.scripps.yates.ip2tomassive;
 
 public enum FileType {
-	RAW("raw-files", null), CENSUS_CHRO("census_chro-files", "census_chro.xml"),
-	DTASELECT("DTASelect-files", "DTASelect-filter.txt"), OTHER("other-files", null), MS1("ms1-files", null),
-	MS2("ms2-files", null), MS3("ms3-files", null);
+	DTASELECT("DTASelect-files", "DTASelect-filter.txt", "txt"), RAW("raw-files", null, "raw"),
+	CENSUS_CHRO("census_chro-files", "census_chro.xml", "xml"), OTHER("other-files", null, null),
+	MS1("ms1-files", null, "ms1"), MS2("ms2-files", null, "ms2"), MS3("ms3-files", null, "ms3");
 	private final String description;
 	private final String defaultFileName;
+	private final String extension;
 
-	FileType(String description, String defaultFileName) {
+	FileType(String description, String defaultFileName, String extension) {
 		this.description = description;
 		this.defaultFileName = defaultFileName;
+		this.extension = extension;
 	}
 
 	public String getDescription() {
@@ -27,5 +29,9 @@ public enum FileType {
 
 	public String getDefaultFileName() {
 		return defaultFileName;
+	}
+
+	public String getExtension() {
+		return extension;
 	}
 }

@@ -31,6 +31,7 @@ import edu.scripps.yates.utilities.ftp.FTPUtils;
 public class MultipleProjectIP2ToGoogleDrive extends MultipleProjectIP2ToMassive {
 	private final static Logger log = Logger.getLogger(MultipleProjectIP2ToGoogleDrive.class);
 	private static final String contentType = GoogleDriveClient.DEFAULT_CONTENT_TYPE;
+	private static final long differenceToleranceForOverriding = 100;
 	private final GoogleDriveClient googleDriveClient;
 	private boolean override;
 
@@ -48,7 +49,6 @@ public class MultipleProjectIP2ToGoogleDrive extends MultipleProjectIP2ToMassive
 		long sizeTransferred = 0l;
 		try {
 			final String projectBasePathInIP2 = getProjectBasePathInIP2();
-
 			sshIP2 = loginToIP2();
 			String remoteFolderPath = "Proteomics/data";
 			if (submissionName != null && !"".equals(submissionName)) {
@@ -104,56 +104,107 @@ public class MultipleProjectIP2ToGoogleDrive extends MultipleProjectIP2ToMassive
 					try {
 						fullPathToIP2 = pathToFolderInIP2 + ftpFileInIP2.getFilename();
 						String fileName = FilenameUtils.getName(fullPathToIP2);
-						final List<com.google.api.services.drive.model.File> filesInGoogleDrive = googleDriveClient
-								.getGoogleFilesByName(fileName, parentID);
-						if (filesInGoogleDrive != null && !filesInGoogleDrive.isEmpty()) {
-							final Long sizeInGoogleDrive = filesInGoogleDrive.get(0).getSize();
-
-							final long sizeInIP2 = ftpFileInIP2.getAttrs().getSize();
-							if (sizeInGoogleDrive == sizeInIP2) {
-								log.info("File found at Google drive at: " + remoteFolderPath + " with the same size ("
-										+ FileUtils.getDescriptiveSizeFromBytes(sizeInGoogleDrive)
-										+ "). Skipping upload...");
-								return 0l;
-							}
-							if (!override) {
-								log.info("File found at Google drive at: " + remoteFolderPath + " . However, its size ("
-										+ FileUtils.getDescriptiveSizeFromBytes(sizeInGoogleDrive)
-										+ ") is different than the file in IP2 ("
-										+ FileUtils.getDescriptiveSizeFromBytes(sizeInIP2) + ") but override is FALSE");
-								return 0l;
-							} else if (override) {
-								log.info("File found at Google drive at: " + remoteFolderPath + " . However, its size ("
-										+ FileUtils.getDescriptiveSizeFromBytes(sizeInGoogleDrive)
-										+ ") is different than the file in IP2 ("
-										+ FileUtils.getDescriptiveSizeFromBytes(sizeInIP2) + ") and override is TRUE");
-							}
-						}
-
 						final String keywordToTranslate = getKeywordToTranslate(fileName);
 						if (keywordToTranslate != null) {
 							final String newName = fileName.replace(keywordToTranslate,
 									keywordTranslations.get(keywordToTranslate));
-							log.info("File named as " + fileName + " now is mapped to " + newName);
+							log.info("File '" + fileName + "' now is mapped to " + newName);
 							fileName = newName;
+						}
+
+						final List<String> filesWithSameSize = new ArrayList<String>();
+						final List<String> filesWithDifferentSize = new ArrayList<String>();
+						final List<String> filesToRemove = new ArrayList<String>();
+						final List<com.google.api.services.drive.model.File> filesInGoogleDrive = googleDriveClient
+								.getGoogleFilesByName(fileName, parentID);
+						if (filesInGoogleDrive != null && !filesInGoogleDrive.isEmpty()) {
+
+							final long sizeInIP2 = ftpFileInIP2.getAttrs().getSize();
+
+							for (final com.google.api.services.drive.model.File fileInGoogleDrive : filesInGoogleDrive) {
+								final Long sizeInGoogleDrive = fileInGoogleDrive.getSize();
+
+								final long difference = Math.abs(sizeInIP2 - sizeInGoogleDrive);
+								if (difference > 0l) {
+									log.info("Difference on size detected in file at Google drive: "
+											+ FileUtils.getDescriptiveSizeFromBytes(difference));
+								}
+								if (difference <= differenceToleranceForOverriding) {
+									log.info("File '" + fileName + "' found at Google drive at: " + remoteFolderPath
+											+ " with difference in size lower than tolerance ("
+											+ FileUtils.getDescriptiveSizeFromBytes(difference)
+											+ "). Skipping upload...");
+									filesWithSameSize.add(fileInGoogleDrive.getId());
+								} else {
+									filesWithDifferentSize.add(fileInGoogleDrive.getId());
+								}
+							}
+							if (!override) {
+								log.info("File '" + fileName + "' found at Google drive at: " + remoteFolderPath
+										+ " . However, its size ("
+										+ FileUtils.getDescriptiveSizeFromBytes(filesInGoogleDrive.get(0).getSize())
+										+ ") is different than the file in IP2 ("
+										+ FileUtils.getDescriptiveSizeFromBytes(sizeInIP2) + ") but override is FALSE");
+								return 0l;
+							} else {
+
+								// is there any with the same size? if so, remove the rest
+								if (!filesWithSameSize.isEmpty()) {
+
+									// remove the rest
+									for (int i = 1; i < filesWithSameSize.size(); i++) {
+										filesToRemove.add(filesWithSameSize.get(i));
+										log.info("File found at Google drive at: " + remoteFolderPath
+												+ " with the same size. However, its repeated more than once in the same location so it will be deleted because override is TRUE");
+									}
+								}
+								if (!filesWithDifferentSize.isEmpty()) {
+									for (int i = 0; i < filesWithDifferentSize.size(); i++) {
+										filesToRemove.add(filesWithDifferentSize.get(i));
+										log.info("File found at Google drive at: " + remoteFolderPath
+												+ " with different size, so it will be deleted because override is TRUE");
+
+									}
+								}
+
+							}
+
 						}
 						progressMonitor.setSuffix("(" + fileName + ") ");
 
 						final long sizeInIP2 = ftpFileInIP2.getAttrs().getSize();
-						final String fullPathToMassive = remoteFolderPath + "/" + fileName;
-						final long sizeInMassive = 0;
+
 						try {
 
-							log.info("Output file in Google Drive: " + fullPathToMassive);
-							final ChannelSftp sftpChannel = FTPUtils.openSFTPChannel(sshIP2);
-							final InputStream inputStream = sftpChannel.get(fullPathToIP2);
+							if (filesInGoogleDrive.isEmpty()
+									|| (filesWithDifferentSize.isEmpty() && filesWithSameSize.isEmpty())) {
+								final String fullPathToMassive = remoteFolderPath + "/" + fileName;
+								log.info("Output file in Google Drive: " + fullPathToMassive);
+								final ChannelSftp sftpChannel = FTPUtils.openSFTPChannel(sshIP2);
+								final InputStream inputStream = sftpChannel.get(fullPathToIP2);
+								final com.google.api.services.drive.model.File uploadedFile = googleDriveClient
+										.uploadFile(parentID, contentType, fileName, inputStream);
+								sftpChannel.exit();
+								sizeTransferred += uploadedFile.getSize();
+							} else {
 
-							final com.google.api.services.drive.model.File uploadedFile = googleDriveClient
-									.uploadFile(parentID, contentType, fileName, inputStream);
+								// if there was more than one, remove it
+								for (int i = 0; i < filesToRemove.size(); i++) {
+									final String id = filesToRemove.get(i);
+									googleDriveClient.deleteFile(id);
+									final com.google.api.services.drive.model.File fileRemoved = filesInGoogleDrive
+											.stream().filter(f -> f.getId().equals(id)).findAny().get();
+									log.info(fileRemoved.getName() + " last modified at "
+											+ fileRemoved.getModifiedTime().toString() + " has been deleted");
+								}
 
-							sizeTransferred += uploadedFile.getSize();
-							sftpChannel.exit();
+							}
 
+							if (!filesInGoogleDrive.isEmpty() && filesWithSameSize.size() == 1) {
+								sizeTransferred += filesInGoogleDrive.stream()
+										.filter(f -> f.getId().equals(filesWithSameSize.get(0))).findAny().get()
+										.getSize();
+							}
 							log.info(
 									"Transfer of " + FileUtils.getDescriptiveSizeFromBytes(sizeTransferred) + " done.");
 							if (sizeTransferred != sizeInIP2 && sizeInIP2 > -1) {
@@ -177,45 +228,104 @@ public class MultipleProjectIP2ToGoogleDrive extends MultipleProjectIP2ToMassive
 
 				}
 			} else {
-				final String fileName = FilenameUtils.getName(fullPathToIP2);
+				String fileName = FilenameUtils.getName(fullPathToIP2);
+				final String keywordToTranslate = getKeywordToTranslate(fileName);
+				if (keywordToTranslate != null) {
+					final String newName = fileName.replace(keywordToTranslate,
+							keywordTranslations.get(keywordToTranslate));
+					log.info("File '" + fileName + "' now is mapped to " + newName);
+					fileName = newName;
+				}
 				progressMonitor.setSuffix("(" + fileName + ") ");
 				try {
 
-					try {
-						final List<com.google.api.services.drive.model.File> filesInGoogleDrive = googleDriveClient
-								.getGoogleFilesByName(fileName, parentID);
-						if (filesInGoogleDrive != null && !filesInGoogleDrive.isEmpty()) {
-							final Long sizeInGoogleDrive = filesInGoogleDrive.get(0).getSize();
-							final LsEntry ftpFileInIP2 = FTPUtils.getFileEntry(sshIP2, fullPathToIP2);
-							final long sizeInIP2 = ftpFileInIP2.getAttrs().getSize();
-							if (sizeInGoogleDrive == sizeInIP2) {
+					final List<String> filesWithSameSize = new ArrayList<String>();
+					final List<String> filesWithDifferentSize = new ArrayList<String>();
+					final List<String> filesToRemove = new ArrayList<String>();
+
+					final List<com.google.api.services.drive.model.File> filesInGoogleDrive = googleDriveClient
+							.getGoogleFilesByName(fileName, parentID);
+					if (filesInGoogleDrive != null && !filesInGoogleDrive.isEmpty()) {
+
+						final LsEntry ftpFileInIP2 = FTPUtils.getFileEntry(sshIP2, fullPathToIP2);
+						final long sizeInIP2 = ftpFileInIP2.getAttrs().getSize();
+
+						for (final com.google.api.services.drive.model.File fileInGoogleDrive : filesInGoogleDrive) {
+
+							final Long sizeInGoogleDrive = fileInGoogleDrive.getSize();
+							final long difference = Math.abs(sizeInIP2 - sizeInGoogleDrive);
+							if (difference > 0l) {
+								log.info("Difference on size detected in file at Google drive: "
+										+ FileUtils.getDescriptiveSizeFromBytes(difference));
+							}
+							if (difference <= differenceToleranceForOverriding) {
+								filesWithSameSize.add(fileInGoogleDrive.getId());
 								log.info("File found at Google drive at: " + remoteFolderPath + " with the same size ("
 										+ FileUtils.getDescriptiveSizeFromBytes(sizeInGoogleDrive)
 										+ "). Skipping upload...");
-								return 0l;
-							}
-							if (!override) {
-								log.info("File found at Google drive at: " + remoteFolderPath + " . However, its size ("
-										+ FileUtils.getDescriptiveSizeFromBytes(sizeInGoogleDrive)
-										+ ") is different than the file in IP2 ("
-										+ FileUtils.getDescriptiveSizeFromBytes(sizeInIP2) + ") but override is FALSE");
-								return 0l;
-							} else if (override) {
-								log.info("File found at Google drive at: " + remoteFolderPath + " . However, its size ("
-										+ FileUtils.getDescriptiveSizeFromBytes(sizeInGoogleDrive)
-										+ ") is different than the file in IP2 ("
-										+ FileUtils.getDescriptiveSizeFromBytes(sizeInIP2) + ") and override is TRUE");
+
+//									return sizeInGoogleDrive;
+							} else {
+								filesWithDifferentSize.add(fileInGoogleDrive.getId());
 							}
 						}
+						if (!override) {
+							log.info("File '" + fileName + "' found at Google drive at: " + remoteFolderPath
+									+ " . However, its size ("
+									+ FileUtils.getDescriptiveSizeFromBytes(filesInGoogleDrive.get(0).getSize())
+									+ ") is different than the file in IP2 ("
+									+ FileUtils.getDescriptiveSizeFromBytes(sizeInIP2) + ") but override is FALSE");
 
+							return 0l;
+						} else {
+							// is there any with the same size? if so, remove the rest
+							if (!filesWithSameSize.isEmpty()) {
+								// remove the rest
+								for (int i = 1; i < filesWithSameSize.size(); i++) {
+									filesToRemove.add(filesWithSameSize.get(i));
+									log.info("File found at Google drive at: " + remoteFolderPath
+											+ " with the same size. However, its repeated more than once in the same location so it will be deleted because override is TRUE");
+								}
+							}
+							if (!filesWithDifferentSize.isEmpty()) {
+								for (int i = 0; i < filesWithDifferentSize.size(); i++) {
+									filesToRemove.add(filesWithDifferentSize.get(i));
+									log.info("File found at Google drive at: " + remoteFolderPath
+											+ " with different size, so it will be deleted because override is TRUE");
+
+								}
+							}
+
+						}
+					}
+
+					if (filesInGoogleDrive.isEmpty()
+							|| (filesWithDifferentSize.isEmpty() && filesWithSameSize.isEmpty())) {
+						final String fullPathToMassive = remoteFolderPath + "/" + fileName;
+						log.info("Output file in Google Drive: " + fullPathToMassive);
 						final ChannelSftp sftpChannel = FTPUtils.openSFTPChannel(sshIP2);
 						final InputStream inputStream = sftpChannel.get(fullPathToIP2);
-
 						final com.google.api.services.drive.model.File uploadedFile = googleDriveClient
 								.uploadFile(parentID, contentType, fileName, inputStream);
+						sftpChannel.exit();
 						sizeTransferred += uploadedFile.getSize();
-					} finally {
+					} else {
 
+						// if there was more than one, remove it
+
+						for (int i = 0; i < filesToRemove.size(); i++) {
+							final String id = filesToRemove.get(i);
+							googleDriveClient.deleteFile(id);
+							final com.google.api.services.drive.model.File fileRemoved = filesInGoogleDrive.stream()
+									.filter(f -> f.getId().equals(id)).findAny().get();
+							log.info(fileRemoved.getName() + " last modified at "
+									+ fileRemoved.getModifiedTime().toString() + " has been deleted");
+						}
+
+					}
+					if (!filesInGoogleDrive.isEmpty() && filesWithSameSize.size() == 1) {
+						sizeTransferred += filesInGoogleDrive.stream()
+								.filter(f -> f.getId().equals(filesWithSameSize.get(0))).findAny().get().getSize();
 					}
 
 				} catch (final IOException e) {
@@ -232,7 +342,9 @@ public class MultipleProjectIP2ToGoogleDrive extends MultipleProjectIP2ToMassive
 					log.warn(e.getMessage());
 				}
 			}
-		} catch (final SocketException e2) {
+		} catch (
+
+		final SocketException e2) {
 			e2.printStackTrace();
 			log.warn(e2.getMessage());
 		} catch (final IOException e2) {

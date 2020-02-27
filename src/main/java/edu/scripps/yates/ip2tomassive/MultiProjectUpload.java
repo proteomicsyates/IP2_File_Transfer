@@ -26,7 +26,10 @@ public class MultiProjectUpload {
 						includeDTASelectFiles, takeEverythingBaseFolder);
 				remotePathsFile = inputFileGenerator.run();
 			}
-			final boolean useGoogleDrive = Boolean.valueOf(args[2]);
+			boolean useGoogleDrive = false;
+			if (args.length > 2) {
+				useGoogleDrive = Boolean.valueOf(args[2]);
+			}
 			final Map<String, String> translations = new THashMap<String, String>();
 			// translations.put("X09", "normal1");
 			// translations.put("X5709", "normal1");

@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.commons.lang.ArrayUtils;
+import org.apache.log4j.Logger;
 
 import com.google.api.client.auth.oauth2.Credential;
 import com.google.api.client.extensions.java6.auth.oauth2.AuthorizationCodeInstalledApp;
@@ -36,14 +37,14 @@ import com.google.api.services.drive.model.FileList;
 import gnu.trove.map.hash.THashMap;
 
 public class GoogleDriveClient {
-
+	private final static Logger log = Logger.getLogger(GoogleDriveClient.class);
 	private static final String APPLICATION_NAME = "Salvador Martinez Yates Lab Google API Client";
 	private static final JsonFactory JSON_FACTORY = JacksonFactory.getDefaultInstance();
 	private static final String TOKENS_DIRECTORY_PATH = "tokens";
 
 	private static GoogleDriveClient instance;
 	private final String CREDENTIALS_FILE_PATH;
-	private final Map<String, List<File>> filesByPath = new THashMap<String, List<File>>();
+	private final Map<String, List<File>> filesByNameAndParentID = new THashMap<String, List<File>>();
 	private final Map<String, File> filesByID = new THashMap<String, File>();
 	private Drive service;
 
@@ -115,7 +116,8 @@ public class GoogleDriveClient {
 	 */
 	public final File createGoogleFolder(String folderIdParent, String rawFolderName)
 			throws IOException, GeneralSecurityException {
-
+		log.info("Creating folder at Google drive: '" + rawFolderName + "' on parent folder with ID '" + folderIdParent
+				+ "'");
 		String[] folderNames = null;
 		if (rawFolderName.contains("/")) {
 			folderNames = rawFolderName.split("/");
@@ -168,6 +170,21 @@ public class GoogleDriveClient {
 		return file;
 	}
 
+	private File _updateGoogleFile(String customFileName, AbstractInputStreamContent uploadStreamContent,
+			String fileIDToOverride) throws IOException, GeneralSecurityException {
+
+		final File fileMetadata = new File();
+		fileMetadata.setName(customFileName);
+
+		//
+		final Drive driveService = getDriveService();
+
+		final File file = driveService.files().update(fileIDToOverride, fileMetadata, uploadStreamContent)
+				.setFields("id, webContentLink, webViewLink, parents, size").execute();
+
+		return file;
+	}
+
 	//
 
 	/**
@@ -187,6 +204,68 @@ public class GoogleDriveClient {
 		final AbstractInputStreamContent uploadStreamContent = new ByteArrayContent(contentType, uploadData);
 		//
 		return _createGoogleFile(googleFolderIdParent, contentType, customFileName, uploadStreamContent);
+	}
+
+	/**
+	 * Update/Override Google File from java.io.File
+	 * 
+	 * 
+	 * @param contentType
+	 * @param customFileName
+	 * @param uploadFile
+	 * @return
+	 * @throws IOException
+	 * @throws GeneralSecurityException
+	 */
+	public File updateFile(String contentType, //
+			String customFileName, java.io.File uploadFile, String fileIDToOverride)
+			throws IOException, GeneralSecurityException {
+
+		//
+		final AbstractInputStreamContent uploadStreamContent = new FileContent(contentType, uploadFile);
+		//
+		return _updateGoogleFile(customFileName, uploadStreamContent, fileIDToOverride);
+	}
+
+	// Create Google File from InputStream
+	/**
+	 * Update/Override Google File from InputStream
+	 * 
+	 * 
+	 * @param contentType
+	 * @param customFileName
+	 * @param inputStream
+	 * @return
+	 * @throws IOException
+	 * @throws GeneralSecurityException
+	 */
+	public File updateFile(String contentType, //
+			String customFileName, InputStream inputStream, String fileIDToOverride)
+			throws IOException, GeneralSecurityException {
+
+		//
+		final AbstractInputStreamContent uploadStreamContent = new InputStreamContent(contentType, inputStream);
+		//
+		return _updateGoogleFile(customFileName, uploadStreamContent, fileIDToOverride);
+	}
+
+	/**
+	 * Update/Override Google File from byte[]
+	 * 
+	 * 
+	 * @param contentType
+	 * @param customFileName
+	 * @param uploadData
+	 * @return
+	 * @throws IOException
+	 * @throws GeneralSecurityException
+	 */
+	public File updateFile(String contentType, String customFileName, byte[] uploadData, String fileIDToOverride)
+			throws IOException, GeneralSecurityException {
+		//
+		final AbstractInputStreamContent uploadStreamContent = new ByteArrayContent(contentType, uploadData);
+		//
+		return _updateGoogleFile(customFileName, uploadStreamContent, fileIDToOverride);
 	}
 
 	/**
@@ -251,7 +330,7 @@ public class GoogleDriveClient {
 		do {
 			final FileList result = driveService.files().list().setQ(query).setSpaces("drive") //
 					// Fields will be assigned values: id, name, createdTime
-					.setFields("nextPageToken, files(id, name, createdTime)")//
+					.setFields("nextPageToken, files(id, name, createdTime, modifiedTime, mimeType, parents, size)")//
 					.setPageToken(pageToken).execute();
 			for (final File file : result.getFiles()) {
 				list.add(file);
@@ -297,8 +376,8 @@ public class GoogleDriveClient {
 	 */
 	public final List<File> getGoogleFilesOrFoldersByName(String fileNameLike, Boolean folder, String parentID)
 			throws IOException, GeneralSecurityException {
-		if (this.filesByPath.containsKey(fileNameLike)) {
-			return this.filesByPath.get(fileNameLike);
+		if (this.filesByNameAndParentID.containsKey(fileNameLike + parentID)) {
+			return this.filesByNameAndParentID.get(fileNameLike + parentID);
 		}
 		final Drive driveService = getDriveService();
 
@@ -332,22 +411,25 @@ public class GoogleDriveClient {
 		do {
 			final FileList result = driveService.files().list().setQ(query).setSpaces("drive") //
 					// Fields will be assigned values: id, name, createdTime, mimeType
-					.setFields("nextPageToken, files(id, name, createdTime, mimeType, parents, size)")//
+					.setFields("nextPageToken, files(id, name, createdTime, modifiedTime, mimeType, parents, size)")//
 					.setPageToken(pageToken).execute();
 			for (final File file : result.getFiles()) {
 				if (folderNames.length == 1
 						|| isFileInPath(file, (String[]) ArrayUtils.subarray(folderNames, 0, folderNames.length - 1))) {
 					list.add(file);
-					if (!this.filesByPath.containsKey(fileNameLike)) {
-						this.filesByPath.put(fileNameLike, new ArrayList<File>());
+					if (!this.filesByNameAndParentID.containsKey(fileNameLike + parentID)) {
+						this.filesByNameAndParentID.put(fileNameLike + parentID, new ArrayList<File>());
 					}
-					this.filesByPath.get(fileNameLike).add(file);
+					this.filesByNameAndParentID.get(fileNameLike + parentID).add(file);
 				}
 			}
 			pageToken = result.getNextPageToken();
 		} while (pageToken != null);
 
 		//
+		if (list.size() > 1) {
+			log.info("multiple files with the same name '" + fileNameLike + "' and in the same folder are found!");
+		}
 		return list;
 	}
 
@@ -380,6 +462,18 @@ public class GoogleDriveClient {
 			}
 		}
 		return filesByID.get(fileID);
+
+	}
+
+	/**
+	 * Deletes a file in Google Drive with a certain ID
+	 * 
+	 * @param fileId
+	 * @throws IOException
+	 * @throws GeneralSecurityException
+	 */
+	public void deleteFile(String fileId) throws IOException, GeneralSecurityException {
+		getDriveService().files().delete(fileId).execute();
 
 	}
 

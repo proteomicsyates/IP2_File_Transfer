@@ -170,7 +170,7 @@ public class IP2ToMassive {
 			sftpIP2 = loginToIP2();
 			sftpChannel = FTPUtils.openSFTPChannel(sftpIP2);
 
-			ret.addAll(getProjectPaths(sftpChannel, projectBasePath, experimentIDs));
+			ret.addAll(getProjectPaths(sftpChannel, projectBasePath, experimentIDs, 1));
 
 		} finally {
 			sftpChannel.disconnect();
@@ -179,26 +179,42 @@ public class IP2ToMassive {
 		return ret;
 	}
 
-	private List<String> getProjectPaths(ChannelSftp sftpChannel, String projectBasePath, TIntHashSet experimentIDs)
-			throws SftpException {
+	private List<String> getProjectPaths(ChannelSftp sftpChannel, String projectBasePath, TIntHashSet experimentIDs,
+			int level) throws SftpException {
 		final List<String> ret = new ArrayList<String>();
 		final Vector<LsEntry> ls = sftpChannel.ls(projectBasePath);
 		for (final LsEntry lsEntry : ls) {
 			final String fileName = lsEntry.getFilename();
 			if (lsEntry.getAttrs().isDir()) {
+
+				log.info("Looking at folder " + projectBasePath + "/" + fileName);
+
+				if (fileName.contains("Xi_2")) {
+					log.info("asdf");
+				}
 				if (fileName.contains("_")) {
 					try {
-						final int experimentID = Integer.valueOf(fileName.substring(fileName.lastIndexOf("_") + 1));
-						if (experimentIDs == null || experimentIDs.contains(experimentID)) {
+						final String substring = fileName.substring(fileName.lastIndexOf("_") + 1);
+
+						final int experimentID = Integer.valueOf(substring);
+						if (substring.length() < 5) {
+							// this is not an experiment ID
+							throw new NumberFormatException();
+						}
+						if (experimentIDs == null // if experimentsIDs==null is because we want all experiments, not
+													// just some with certain IDs
+								|| experimentIDs.contains(experimentID)) {
 							ret.add(projectBasePath + "/" + lsEntry.getFilename());
+							log.info("Found experiment " + experimentID + " at folder " + projectBasePath + "/"
+									+ fileName);
 						}
 					} catch (final NumberFormatException e) {
 						ret.addAll(getProjectPaths(sftpChannel, projectBasePath + "/" + lsEntry.getFilename(),
-								experimentIDs));
+								experimentIDs, level + 1));
 					}
 				} else if (!fileName.equals(".") && !fileName.equals("..")) {
-					ret.addAll(
-							getProjectPaths(sftpChannel, projectBasePath + "/" + lsEntry.getFilename(), experimentIDs));
+					ret.addAll(getProjectPaths(sftpChannel, projectBasePath + "/" + lsEntry.getFilename(),
+							experimentIDs, level + 1));
 				}
 			}
 		}

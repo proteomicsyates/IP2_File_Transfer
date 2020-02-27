@@ -7,6 +7,8 @@ import java.net.SocketException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,6 +30,8 @@ import com.jcraft.jsch.SftpException;
 import edu.scripps.yates.utilities.dates.DatesUtil;
 import edu.scripps.yates.utilities.files.FileUtils;
 import edu.scripps.yates.utilities.ftp.FTPUtils;
+import edu.scripps.yates.utilities.progresscounter.ProgressCounter;
+import edu.scripps.yates.utilities.progresscounter.ProgressPrintingType;
 
 public class MultipleProjectIP2ToMassive extends IP2ToMassive {
 	private final static Logger log = Logger.getLogger(MultipleProjectIP2ToMassive.class);
@@ -73,16 +77,25 @@ public class MultipleProjectIP2ToMassive extends IP2ToMassive {
 		}
 		final Set<FileType> fileTypes = dataset.getPathsByFileType().keySet();
 		final Map<String, String> outputFileNamesByPath = dataset.getOutputFileNameByPath();
-		for (final FileType fileType : fileTypes) {
-			final List<String> paths = dataset.getPathsByFileType().get(fileType);
 
+		final List<FileType> fileTypesList = new ArrayList<FileType>();
+		fileTypesList.addAll(fileTypes);
+		Collections.sort(fileTypesList);
+		for (final FileType fileType : fileTypesList) {
+			final List<String> paths = dataset.getPathsByFileType().get(fileType);
+			final ProgressCounter counter = new ProgressCounter(paths.size(), ProgressPrintingType.EVERY_STEP, 1);
 			for (int i = 0; i < paths.size(); i++) {
+				counter.increment();
 				final String path = paths.get(i);
 				final String outputFileName = outputFileNamesByPath.get(path);
 				final long transferredSize = transferFile(path, outputFileName, fileType, dataset);
 				totalTransferredSize += transferredSize;
 				System.out.println(FileUtils.getDescriptiveSizeFromBytes(totalTransferredSize) + " transferred in "
 						+ datasetName + " dataset so far (file " + (i + 1) + " out of " + paths.size() + ")");
+				final String printIfNecessary = counter.printIfNecessary();
+				if (!"".equals(printIfNecessary)) {
+					System.out.println(printIfNecessary);
+				}
 			}
 		}
 		System.out.println(FileUtils.getDescriptiveSizeFromBytes(totalTransferredSize) + " transferred in "
@@ -247,24 +260,49 @@ public class MultipleProjectIP2ToMassive extends IP2ToMassive {
 					FTPUtils.showServerReply(ftpMassive);
 				}
 			}
-			if (outputFileName == null) {
+			if (outputFileName == null || "".equals(FilenameUtils.getExtension(fullPathToIP2))) {
 				// fullPathToIP2 points to a set of files, such as:
 				// path/to/files/*.raw
-				final String extension = FilenameUtils.getExtension(fullPathToIP2);
-
-				final String pathToFolderInIP2 = FilenameUtils.getFullPath(fullPathToIP2);
+				String pathToFolderInIP2 = FilenameUtils.getFullPath(fullPathToIP2);
+				String extension = FilenameUtils.getExtension(fullPathToIP2);
+				if ("".equals(extension)) {
+					pathToFolderInIP2 = fullPathToIP2;
+				}
 				final List<LsEntry> ftpFilesInIP2 = new ArrayList<LsEntry>();
 				if (FTPUtils.exist(sshIP2, fullPathToIP2)) {
 					final LsEntry lsEntry = FTPUtils.getFileEntry(sshIP2, fullPathToIP2);
 					ftpFilesInIP2.add(lsEntry);
 				} else {
+
+					if ("".equals(extension)) {
+						extension = fileType.getExtension();
+					}
 					ftpFilesInIP2.addAll(FTPUtils.getFilesInFolderByExtension(sshIP2, pathToFolderInIP2, extension));
 				}
+				// sort ftpFilesInIP2 by name
+				Collections.sort(ftpFilesInIP2, new Comparator<LsEntry>() {
+
+					@Override
+					public int compare(LsEntry o1, LsEntry o2) {
+						return o1.getFilename().compareTo(o2.getFilename());
+					}
+				});
+				int counter = 1;
 				for (final LsEntry ftpFileInIP2 : ftpFilesInIP2) {
 
 					try {
-						fullPathToIP2 = pathToFolderInIP2 + ftpFileInIP2.getFilename();
+						fullPathToIP2 = pathToFolderInIP2;
+						if (!fullPathToIP2.endsWith("/")) {
+							fullPathToIP2 = fullPathToIP2 + "/";
+						}
+						fullPathToIP2 = fullPathToIP2 + ftpFileInIP2.getFilename();
 						String fileName = FilenameUtils.getName(fullPathToIP2);
+						if (outputFileName != null) {
+							fileName = outputFileName + "_" + counter;
+							if ("".equals(FilenameUtils.getExtension(fileName))) {
+								fileName = fileName + "." + extension;
+							}
+						}
 						final String keywordToTranslate = getKeywordToTranslate(fileName);
 						if (keywordToTranslate != null) {
 							final String newName = fileName.replace(keywordToTranslate,
@@ -290,15 +328,13 @@ public class MultipleProjectIP2ToMassive extends IP2ToMassive {
 									sizeTransferred += sizeInIP2;
 									continue;
 								} else if (sizeInMassive > sizeInIP2) {
-									log.info("File '" + FilenameUtils.getName(fullPathToIP2)
-											+ "' is bigger in MassIVE: IP2:"
-											+ FileUtils.getDescriptiveSizeFromBytes(sizeInIP2) + " Massive:"
-											+ FileUtils.getDescriptiveSizeFromBytes(sizeInMassive) + " diff: "
+									log.info("File '" + FilenameUtils.getName(fullPathToIP2) + "' is bigger in MassIVE:"
+											+ FileUtils.getDescriptiveSizeFromBytes(sizeInMassive) + " than in IP2:"
+											+ FileUtils.getDescriptiveSizeFromBytes(sizeInIP2) + " diff: "
 											+ FileUtils.getDescriptiveSizeFromBytes(sizeInMassive - sizeInIP2));
 								} else if (sizeInIP2 > sizeInMassive) {
-									log.info("File '" + FilenameUtils.getName(fullPathToIP2)
-											+ "' is bigger in MassIVE: IP2:"
-											+ FileUtils.getDescriptiveSizeFromBytes(sizeInIP2) + " Massive:"
+									log.info("File '" + FilenameUtils.getName(fullPathToIP2) + "' is bigger in IP2:"
+											+ FileUtils.getDescriptiveSizeFromBytes(sizeInIP2) + " than in Massive:"
 											+ FileUtils.getDescriptiveSizeFromBytes(sizeInMassive) + " diff: "
 											+ FileUtils.getDescriptiveSizeFromBytes(sizeInIP2 - sizeInMassive));
 								}
@@ -325,6 +361,7 @@ public class MultipleProjectIP2ToMassive extends IP2ToMassive {
 							ftpMassive.logout();
 							ftpMassive.disconnect();
 							FTPUtils.showServerReply(ftpMassive);
+							counter++;
 						}
 
 					} catch (final IOException e) {
