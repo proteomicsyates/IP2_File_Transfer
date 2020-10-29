@@ -1,6 +1,7 @@
 package edu.scripps.yates.ip2tomassive;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.SocketException;
@@ -17,6 +18,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.commons.io.FilenameUtils;
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.net.ftp.FTP;
 import org.apache.commons.net.ftp.FTPClient;
 import org.apache.log4j.Logger;
@@ -88,7 +90,13 @@ public class MultipleProjectIP2ToMassive extends IP2ToMassive {
 				counter.increment();
 				final String path = paths.get(i);
 				final String outputFileName = outputFileNamesByPath.get(path);
-				final long transferredSize = transferFile(path, outputFileName, fileType, dataset);
+
+				long transferredSize = 0l;
+				if (isLocalFile(path)) {
+					transferredSize = transferLocalFile(path, outputFileName, fileType, dataset);
+				} else {
+					transferredSize = transferFile(path, outputFileName, fileType, dataset);
+				}
 				totalTransferredSize += transferredSize;
 				System.out.println(FileUtils.getDescriptiveSizeFromBytes(totalTransferredSize) + " transferred in "
 						+ datasetName + " dataset so far (file " + (i + 1) + " out of " + paths.size() + ")");
@@ -102,6 +110,92 @@ public class MultipleProjectIP2ToMassive extends IP2ToMassive {
 				+ datasetName + " dataset");
 		return totalTransferredSize;
 
+	}
+
+	private long transferLocalFile(String fullPathLocalFile, String outputFileName, FileType fileType,
+			Dataset dataset) {
+		long sizeTransferred = 0l;
+		try {
+			if (outputFileName == null) {
+				outputFileName = FilenameUtils.getName(fullPathLocalFile);
+			}
+			FTPClient ftpMassive = null;
+			String folderPathToMassive = dataset.getName() + "/" + fileType.name();
+			try {
+				ftpMassive = loginToMassive();
+
+				if (submissionName != null && !"".equals(submissionName)) {
+					folderPathToMassive = "/" + submissionName + "/" + folderPathToMassive;
+				}
+				log.info("Transferring file " + fullPathLocalFile);
+				createFullPathInRemote(ftpMassive, folderPathToMassive);
+			} catch (final Exception e) {
+				e.printStackTrace();
+				throw e;
+			} finally {
+				if (ftpMassive != null) {
+					ftpMassive.logout();
+					ftpMassive.disconnect();
+					FTPUtils.showServerReply(ftpMassive);
+				}
+			}
+
+			final String fileName = FilenameUtils.getName(outputFileName);
+			progressMonitor.setSuffix("(" + fileName + ") ");
+			try {
+				final long sizeInLocal = new File(fullPathLocalFile).length();
+				long sizeInMassive = 0;
+				try {
+					ftpMassive = loginToMassive();
+					final String fullPathToMassive = folderPathToMassive + "/" + fileName;
+					sizeInMassive = FTPUtils.getSize(ftpMassive, fullPathToMassive);
+
+					if (sizeInLocal <= sizeInMassive) {
+						log.info("File '" + fullPathLocalFile + "' found in MassIVE with  "
+								+ FileUtils.getDescriptiveSizeFromBytes(sizeInLocal) + ". It will be skipped");
+						return sizeInMassive;
+					} else if (sizeInMassive > 0) {
+						log.info("File '" + fullPathLocalFile + "' found in MassIVE but sizes are different: Local:"
+								+ sizeInLocal + " Massive:" + sizeInMassive + " diff: "
+								+ (sizeInLocal - sizeInMassive));
+					}
+
+					final String outputFullPath = folderPathToMassive + "/" + fileName;
+					log.info("Output file in Massive: " + outputFullPath);
+					final OutputStream outputStreamInMassive = ftpMassive.storeFileStream(outputFullPath);
+					FTPUtils.showServerReply(ftpMassive);
+					if (outputStreamInMassive == null) {
+						throw new IllegalArgumentException("Error trying to create output stream to Massive");
+					}
+					final FileInputStream inputStream = new FileInputStream(fullPathLocalFile);
+
+					final long transferred = IOUtils.copyLarge(inputStream, outputStreamInMassive);
+
+					outputStreamInMassive.close();
+					sizeTransferred += transferred;
+				} finally {
+					ftpMassive.logout();
+					ftpMassive.disconnect();
+					FTPUtils.showServerReply(ftpMassive);
+				}
+
+			} catch (final IOException e) {
+				e.printStackTrace();
+				log.warn(e.getMessage());
+			}
+
+		} catch (final SocketException e2) {
+			e2.printStackTrace();
+			log.warn(e2.getMessage());
+		} catch (final IOException e2) {
+			e2.printStackTrace();
+			log.warn(e2.getMessage());
+		}
+		return sizeTransferred;
+	}
+
+	private boolean isLocalFile(String path) {
+		return new File(path).exists();
 	}
 
 	private void processRemotePaths(File remotePathsFile) throws IOException {
@@ -227,10 +321,17 @@ public class MultipleProjectIP2ToMassive extends IP2ToMassive {
 	}
 
 	private boolean isPath(String line) {
+
 		if (line.startsWith("/")) {
 			return true;
 		} else {
 			// TODO add support for windows paths
+			final char firstLetter = line.charAt(0);
+			if ((firstLetter >= 'a' && firstLetter <= 'z') || (firstLetter >= 'A' && firstLetter <= 'Z')) {
+				if (line.charAt(1) == ':') {
+					return true;
+				}
+			}
 		}
 		return false;
 	}
@@ -269,7 +370,9 @@ public class MultipleProjectIP2ToMassive extends IP2ToMassive {
 					pathToFolderInIP2 = fullPathToIP2;
 				}
 				final List<LsEntry> ftpFilesInIP2 = new ArrayList<LsEntry>();
-				if (FTPUtils.exist(sshIP2, fullPathToIP2)) {
+
+				final boolean exist = FTPUtils.exist(sshIP2, fullPathToIP2);
+				if (exist) {
 					final LsEntry lsEntry = FTPUtils.getFileEntry(sshIP2, fullPathToIP2);
 					ftpFilesInIP2.add(lsEntry);
 				} else {
@@ -279,6 +382,7 @@ public class MultipleProjectIP2ToMassive extends IP2ToMassive {
 					}
 					ftpFilesInIP2.addAll(FTPUtils.getFilesInFolderByExtension(sshIP2, pathToFolderInIP2, extension));
 				}
+
 				// sort ftpFilesInIP2 by name
 				Collections.sort(ftpFilesInIP2, new Comparator<LsEntry>() {
 
