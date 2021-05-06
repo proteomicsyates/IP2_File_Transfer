@@ -141,7 +141,7 @@ public class InputFileGenerator {
 	}
 
 	private TIntHashSet toIntSet(String expIDs) {
-		if (expIDs == null) {
+		if (expIDs == null || "".equals(expIDs)) {
 			return null;
 		}
 		try {
@@ -173,7 +173,9 @@ public class InputFileGenerator {
 			}
 			final InputFileGenerator inputFileGenerator = new InputFileGenerator(paramFile, true, true);
 			inputFileGenerator.run();
+			System.out.println("everything ok");
 		} catch (final Exception e) {
+			e.printStackTrace();
 			System.exit(-1);
 		}
 	}
