@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.FileFilter;
 import java.io.FileOutputStream;
 import java.io.FileWriter;
+import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Files;
@@ -180,25 +181,40 @@ public class TimsTofFileCompactor {
 	}
 
 	private File searchTIMsTofFolder(String basePath2, String ms2FileName) {
-		final File[] listFiles = new File(basePath2).listFiles(new FileFilter() {
+		final File[] directories = new File(basePath2).listFiles(new FilenameFilter() {
 
 			@Override
-			public boolean accept(File file) {
-				if (file.isDirectory()) {
+			public boolean accept(File dir, String name) {
+				if (dir.isDirectory() && name.contains(ms2FileName)) {
 					return true;
 				}
 				return false;
 			}
 		});
-		for (final File file : listFiles) {
-			if (file.isDirectory()) {
-				final String folderName = FilenameUtils.getName(file.getAbsolutePath());
+		if (directories.length > 0) {
+			return directories[0];
+		}
+
+		final File[] directoriesToSearch = new File(basePath2).listFiles(new FileFilter() {
+
+			@Override
+			public boolean accept(File file) {
+				final String name = FilenameUtils.getName(file.getAbsolutePath());
+				if (file.isDirectory() && !name.endsWith(".d")) {
+					return true;
+				}
+				return false;
+			}
+		});
+		for (final File directory : directoriesToSearch) {
+			if (directory.isDirectory()) {
+				final String folderName = FilenameUtils.getName(directory.getAbsolutePath());
 				if (folderName.endsWith(".d")) {
 					if (folderName.equals(ms2FileName + ".d")) {
-						return file;
+						return directory;
 					}
 				}
-				final File ret = searchTIMsTofFolder(file.getAbsolutePath(), ms2FileName);
+				final File ret = searchTIMsTofFolder(directory.getAbsolutePath(), ms2FileName);
 				if (ret != null) {
 					return ret;
 				}
