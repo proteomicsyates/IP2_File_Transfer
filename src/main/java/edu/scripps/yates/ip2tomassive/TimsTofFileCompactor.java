@@ -101,7 +101,7 @@ public class TimsTofFileCompactor {
 							System.out.println(ms2FileName + " not found");
 							continue;
 						}
-						compressedFolder = compressAndSendFolder(timsTofFolder);
+						compressedFolder = compressFolder(timsTofFolder);
 					}
 				}
 			} finally {
@@ -138,7 +138,7 @@ public class TimsTofFileCompactor {
 		}
 	}
 
-	private File compressAndSendFolder(File timsTofFolder) throws IOException {
+	private File compressFolder(File timsTofFolder) throws IOException {
 //		final FTPClient ftpMassive = null;
 		try {
 
@@ -157,7 +157,7 @@ public class TimsTofFileCompactor {
 //						+ ". It will be override");
 //
 //			}
-			final File outputFile = new File("Z:\\share\\Salva\\data\\cbamberg\\SARS_Cov2\\MassIVE submission\\"
+			final File outputFile = new File(timsTofFolder.getParent() + File.separator
 					+ FilenameUtils.getName(timsTofFolder.getAbsolutePath()) + ".tar.gz");
 			if (outputFile.exists() && outputFile.length() > 0l) {
 				log.info("File already created. Skipping it");

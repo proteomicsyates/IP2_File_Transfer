@@ -230,6 +230,10 @@ public class MultipleProjectIP2ToMassive extends IP2ToMassive {
 						fileName = fileName2;
 					}
 				}
+				if (currentDataSet == null) {
+					throw new IllegalArgumentException(
+							"Dataset name not found. Did you forget to add a line as: 'DATASET	dataset_name'? ");
+				}
 				final Dataset currentDataset = datasetsByName.get(currentDataSet);
 				currentDataset.addRemoteOutputFileName(path, fileName);
 				currentDataset.addPath(currentFileType, path);
@@ -238,7 +242,9 @@ public class MultipleProjectIP2ToMassive extends IP2ToMassive {
 			} else {
 				if (line.startsWith(DATASET)) {
 					currentDataSet = line.substring(DATASET.length() + 1).trim();
-					datasetsByName.put(currentDataSet, new Dataset(currentDataSet));
+					if (!datasetsByName.containsKey(currentDataSet)) {
+						datasetsByName.put(currentDataSet, new Dataset(currentDataSet));
+					}
 				}
 			}
 		}

@@ -27,6 +27,9 @@ public class Dataset {
 		} else {
 			System.out.println("Already there");
 		}
+		if (fileType == FileType.RAW) {
+			System.out.println(hashCode() + "\t" + getName() + "\t" + pathsByFileType.get(fileType).size());
+		}
 	}
 
 	private void addFileType(FileType fileType) {
@@ -35,7 +38,8 @@ public class Dataset {
 
 	public void addRemoteOutputFileName(String path, String localFileName) {
 		if (remoteOutputFileNamesByPath.containsKey(path)) {
-			throw new IllegalArgumentException(path + " is duplicated");
+//			throw new IllegalArgumentException(path + " is duplicated");
+			return;
 		}
 		remoteOutputFileNamesByPath.put(path, localFileName);
 	}
